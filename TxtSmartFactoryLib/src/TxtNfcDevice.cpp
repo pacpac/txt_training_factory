@@ -263,7 +263,7 @@ std::string TxtNfcDevice::readTags()
 			 * MUST do, because here we are recognizing tag subtype (NTAG213,NTAG215,NTAG216), and gathering all parameters */
 			int res = ntag21x_get_info(tag);
 			if (res < 0) {
-				printf("Error getting info from tag\n");
+				SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Error getting info from tag",0);
 				break;
 			}
 
@@ -272,7 +272,7 @@ std::string TxtNfcDevice::readTags()
 			uint8_t buffer[36*4]; // Buffer for reading data from tag
 			res = ntag21x_fast_read(tag, 0x4, 0x27, buffer);
 			if (res < 0) {
-				printf("Error reading tag pages\n");
+				SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Error reading tag pages",0);
 				break;
 			}
 
@@ -313,7 +313,7 @@ bool TxtNfcDevice::writeTags(TxtWorkpiece wp, std::vector<uTS> vuts, uint8_t mas
 	SPDLOG_LOGGER_TRACE(spdlog::get("console"), "writeTags {} {} {}",(int)wp.state, (int)wp.type, vuts.size());
 	//see https://github.com/nfc-tools/libfreefare/blob/master/examples/ntag-write.c
 	bool suc = false;
-	FreefareTag* tags;
+	FreefareTag* tags = NULL;
 
 	if (!opened)
 	{
@@ -325,92 +325,105 @@ bool TxtNfcDevice::writeTags(TxtWorkpiece wp, std::vector<uTS> vuts, uint8_t mas
 		return false;
 	}
 
-	if (!(tags = freefare_get_tags(pnd))) {
-		SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Error listing tags.",0);
-	} else {
-		for (int i = 0; tags[i]; i++) {
-			switch (freefare_get_tag_type(tags[i])) {
-			case NTAG_21x:
-			case MIFARE_ULTRALIGHT:
-				break;
-			default:
-				continue;
-			}
-			FreefareTag tag = tags[i];
+	try {
+		SPDLOG_LOGGER_TRACE(spdlog::get("console"), "Before if",0);
+		if (!(tags = freefare_get_tags(pnd))) {
+			SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Error listing tags.",0);
+			suc = false;
+			return suc;
+		} else {
+			SPDLOG_LOGGER_TRACE(spdlog::get("console"), "In Else",0);
+			for (int i = 0; tags[i]; i++) {
+				SPDLOG_LOGGER_TRACE(spdlog::get("console"), "In For. i={}",i);
+				switch (freefare_get_tag_type(tags[i])) {
+				case NTAG_21x:
+				case MIFARE_ULTRALIGHT:
+					break;
+				default:
+					continue;
+				}
+				FreefareTag tag = tags[i];
 
-			char *tag_uid = freefare_get_tag_uid(tag);
-			printf("Tag with UID %s is a %s\n", tag_uid, freefare_get_tag_friendly_name(tags[i]));
-			if (ntag21x_connect(tag) < 0)
-				SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Error connecting to tag.",0);
+				SPDLOG_LOGGER_TRACE(spdlog::get("console"), "freefare_get_tag_uid(tag)",0);
+				char *tag_uid = freefare_get_tag_uid(tag);
+				
+				SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Tag with UID {} is a {}",tag_uid, freefare_get_tag_friendly_name(tags[i]));
 
-			/* Get information about tag
-			 * MUST do, because here we are recognizing tag subtype (NTAG213,NTAG215,NTAG216), and gathering all parameters */
-			int res = ntag21x_get_info(tag);
-			if (res < 0) {
-				printf("Error getting info from tag\n");
-				break;
-			}
+				if (ntag21x_connect(tag) < 0)
+					SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Error connecting to tag.",0);
 
-			//---
-			SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "write header",0);
-			uint8_t data4[4]; // Data to write on tag
-			data4[0] = (TxtWPState_t)wp.state;
-			data4[1] = (TxtWPType_t)wp.type;
-			data4[2] = mask_ts;
-			//data4[3] = 0xff;
-			// writing to tag 4 bytes on page 0x4
-			res = ntag21x_write(tag, 0x4, data4);
-			if (res < 0) {
-				printf("Error writing to tag\n");
-				suc = false;
-				break;
-			}
-			//---
-			SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "write vts",0);
-			for(unsigned int i = 0; i < vuts.size(); i++)
-			{
-				char sts[25];
-				gettimestampstr(vuts[i].s64, sts);
-				std::cout << "  uts: " << sts << std::endl;
+				/* Get information about tag
+				* MUST do, because here we are recognizing tag subtype (NTAG213,NTAG215,NTAG216), and gathering all parameters */
+				int res = ntag21x_get_info(tag);
+				if (res < 0) {
+					SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Error getting info from tag",0);
+					break;
+				}
 
-				if (((mask_ts >> i) & 0x1) == 1)
+				//---
+				SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "write header",0);
+				uint8_t data4[4]; // Data to write on tag
+				data4[0] = (TxtWPState_t)wp.state;
+				data4[1] = (TxtWPType_t)wp.type;
+				data4[2] = mask_ts;
+				//data4[3] = 0xff;
+				// writing to tag 4 bytes on page 0x4
+				res = ntag21x_write(tag, 0x4, data4);
+				if (res < 0) {
+					SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Error writing to tag",0);
+					suc = false;
+					break;
+				}
+				//---
+				SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "write vts",0);
+				for(unsigned int i = 0; i < vuts.size(); i++)
 				{
-					SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "write {}",i);
+					char sts[25];
+					gettimestampstr(vuts[i].s64, sts);
+					std::cout << "  uts: " << sts << std::endl;
 
-					uint8_t data[4]; // Data to write on tag
-					data[0] = vuts[i].u8[0];
-					data[1] = vuts[i].u8[1];
-					data[2] = vuts[i].u8[2];
-					data[3] = vuts[i].u8[3];
-					// writing to tag 4 bytes on page 0x5...
-					res = ntag21x_write(tag, 0x5+i*2, data);
-					if (res < 0) {
-						printf("Error writing to tag\n");
-						suc = false;
-						break;
-					}
-					uint8_t data2[4]; // Data to write on tag
-					data2[0] = vuts[i].u8[4];
-					data2[1] = vuts[i].u8[5];
-					data2[2] = vuts[i].u8[6];
-					data2[3] = vuts[i].u8[7];
-					// writing to tag 4 bytes on page 0x6...
-					res = ntag21x_write(tag, 0x5+i*2+1, data2);
-					if (res < 0) {
-						printf("Error writing to tag\n");
-						suc = false;
-						break;
+					if (((mask_ts >> i) & 0x1) == 1)
+					{
+						SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "write {}",i);
+
+						uint8_t data[4]; // Data to write on tag
+						data[0] = vuts[i].u8[0];
+						data[1] = vuts[i].u8[1];
+						data[2] = vuts[i].u8[2];
+						data[3] = vuts[i].u8[3];
+						// writing to tag 4 bytes on page 0x5...
+						res = ntag21x_write(tag, 0x5+i*2, data);
+						if (res < 0) {
+							SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Error writing to tag",0);
+							suc = false;
+							break;
+						}
+						uint8_t data2[4]; // Data to write on tag
+						data2[0] = vuts[i].u8[4];
+						data2[1] = vuts[i].u8[5];
+						data2[2] = vuts[i].u8[6];
+						data2[3] = vuts[i].u8[7];
+						// writing to tag 4 bytes on page 0x6...
+						res = ntag21x_write(tag, 0x5+i*2+1, data2);
+						if (res < 0) {
+							SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Error writing to tag",0);
+							suc = false;
+							break;
+						}
 					}
 				}
+
+				suc = true;
+				//---
+
+				ntag21x_disconnect(tag);
+				free(tag_uid);
 			}
-
-			suc = true;
-			//---
-
-			ntag21x_disconnect(tag);
-			free(tag_uid);
 		}
+	} catch (...) { 
+		SPDLOG_LOGGER_DEBUG(spdlog::get("console"), "Exception in the block",0);
 	}
+
 	freefare_free_tags(tags);
 	return suc;
 }

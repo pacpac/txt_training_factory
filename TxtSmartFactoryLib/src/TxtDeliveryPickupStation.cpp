@@ -160,14 +160,14 @@ bool TxtDeliveryPickupStation::nfcDelete()
 	bool suc = nfc.eraseTags();
 	if (!suc) return false;
 	std::string tag_uid = nfc.readTags();
-	sound.info1();
+	//sound.info1();
 	return !tag_uid.empty();
 }
 
 std::string TxtDeliveryPickupStation::nfcRead()
 {
 	SPDLOG_LOGGER_TRACE(spdlog::get("console"), "nfcRead", 0);
-	sound.info1();
+	//sound.info1();
 	return nfc.readTags();
 }
 
@@ -188,7 +188,7 @@ bool TxtDeliveryPickupStation::nfcWrite(TxtWorkpiece wp, std::vector<int64_t> vt
 		uts.s64 = vts[i];
 		vuTS.push_back(uts);
 	}
-	sound.info1();
+	//sound.info1();
 	return nfc.writeTags(wp, vuTS, mask_ts);
 }
 
